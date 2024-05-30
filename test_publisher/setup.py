@@ -20,7 +20,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'test_node_= test_publisher.robot_publisher:main'
+            'test_node_= test_publisher.robot_publisher:main',
+            'test_goal_= test_publisher.robot_goal:main',
+            'test_orientation_= test_publisher.robot_orientation:main'
         ],
     },
 )
