@@ -7,6 +7,8 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+import math
 
 
 class AutonomousRobot(Node):
@@ -18,12 +20,44 @@ class AutonomousRobot(Node):
         self.subscriber = self.create_subscription(
             LaserScan, "/scan", self.lidar_callback, 10
         )
+
+        self.subscription = self.create_subscription(
+            Odometry,
+            '/robot_base_controller/odom',
+            self.odom_callback,
+            10
+        )
+
+        self.subscription  # prevent unused variable warning
+
         self.cmd = Twist()
         self.safe_distance = 0.9  # Distance to avoid obstacles in meters
         self.obstacle_on_left = False
         self.obstacle_on_right = False
-        self.adjust = 0
-        self.move_again = 1.0 
+        self.adjust = 0 
+
+    def quaternion_to_euler(self, x, y, z, w):
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = math.atan2(t0, t1)
+
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_y = math.asin(t2)
+
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = math.atan2(t3, t4)
+
+        return roll_x, pitch_y, yaw_z  # in radians
+    
+    def odom_callback(self, msg):
+        orientation = msg.pose.pose.orientation
+        roll, pitch, yaw = self.quaternion_to_euler(
+            orientation.x, orientation.y, orientation.z, orientation.w
+        )
+        self.get_logger().info(f"Orientation (Euler angles): Roll: {roll}, Pitch: {pitch}, Yaw: {yaw}")    
 
     def lidar_callback(self, msg):
         # Check for obstacles in front of the robot
@@ -43,13 +77,16 @@ class AutonomousRobot(Node):
         while rclpy.ok():
             if self.obstacle_on_left or self.obstacle_on_right:
                 self.get_logger().info(f"obstacle there")
-                self.avoid_obstacle()
+                self.avoid_obstacle() 
+                if not self.obstacle_on_right or self.obstacle_on_left:
+                    self.adjust = 0
             else:
                 self.get_logger().info(f"no obstacle")
                 self.move_forward()
             rclpy.spin_once(self)
 
     def move_forward(self):
+        self.adjust = 0
         self.cmd.linear.x = 0.5
         self.cmd.angular.z = 0.0
         self.publisher.publish(self.cmd)
@@ -61,17 +98,16 @@ class AutonomousRobot(Node):
             self.get_logger().info(f"turning left: {self.cmd.angular.z}")
             self.adjust += self.cmd.angular.z
             self.get_logger().info(f"total rotation: {self.adjust}")
-            if self.obstacle_on_left == False:
-                self.cmd.linear.x = self.move_again
-                self.back_to_path(self)
+            
+            
         elif self.obstacle_on_right:
             self.cmd.angular.z = -0.5  # Turn left if there's an obstacle on the right
             self.get_logger().info(f"turning right: {self.cmd.angular.z}")
             self.adjust -= self.cmd.angular.z
             self.get_logger().info(f"total rotation: {self.adjust}")
-            if self.obstacle_on_right == False:
-                self.cmd.linear.x = self.move_again
-                self.back_to_path(self)
+           
+            
+            
         self.publisher.publish(self.cmd)
 
     def back_to_path(self):
