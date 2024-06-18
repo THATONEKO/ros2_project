@@ -22,7 +22,8 @@ setup(
         'console_scripts': [
             'test_node_= test_publisher.robot_publisher:main',
             'test_goal_= test_publisher.robot_goal:main',
-            'test_orientation_= test_publisher.robot_orientation:main'
+            'test_orientation_= test_publisher.robot_orientation:main',
+            'rgb_camera = test_publisher.rgb:main'
         ],
     },
 )
