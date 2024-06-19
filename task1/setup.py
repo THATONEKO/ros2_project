@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'test_publisher'
+package_name = 'task1'
 
 setup(
     name=package_name,
@@ -20,11 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'test_node_= test_publisher.robot_publisher:main',
-            'test_goal_= test_publisher.robot_goal:main',
-            'test_orientation_= test_publisher.robot_orientation:main',
-            'rgb_camera = test_publisher.rgb:main',
-            'task2= test_publisher.task2:main'
+            'task1_solution = task1.task1_solution:main'
         ],
     },
 )

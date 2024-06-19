@@ -32,7 +32,7 @@ class GoalLocation(Node):
 
     def gps_callback(self):
         # Get the cartesian coordinates from the GPS coordinates
-        x, y = gps_to_cartesian(49.89995550730833, 8.900078504470644)
+        x, y = gps_to_cartesian(self.goal_lat, self.goal_long)
 
         # Print cartesian coordinates
         self.get_logger().info(

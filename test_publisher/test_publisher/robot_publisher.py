@@ -30,21 +30,28 @@ class AutonomousRobot(Node):
         
         # Create a timer to get the robot's location periodically 
         self.timer = self.create_timer(0.5, self.get_robot_location)
+        self.timer = self.create_timer(0.5, self.finished_row)
         
         self.distance_to_obstacle = None
         self.angle_to_obstacle = None
-        self.robot_x = None  
-        self.robot_y =None
+        self.robot_x = 0.0  
+        self.robot_y = 0.0
 
         self.robot_yaw = None
         self.obstacle_x = None
         self.obstacle_y = None
         self.initial_obstacle_stored = False
+        self.initial_robot_x = 0.0
+        self.initial_robot_y = 0.0
+
+        self.width_of_rows = 4.875
 
         self.x = 0.0
         self.y = 0.0
 
         self.obstacles_faced = []
+
+        self.end = abs(self.robot_y + self.initial_robot_y)
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
 
         self.cmd = Twist()
@@ -108,14 +115,13 @@ class AutonomousRobot(Node):
                 self.obstacles_faced.append(self.obstacle_y)
                 self.get_logger().info(f"Obstacle y: {self.obstacles_faced}") 
                 
-                if not self.initial_obstacle_stored:
-                    self.initial_obstacle_x = self.obstacle_x
-                    self.initial_obstacle_y = self.obstacle_y
+                if not self.initial_obstacle_stored and self.robot_y != 0.0:
+                    self.initial_robot_x = self.robot_x
+                    self.initial_robot_y = self.robot_y
                     self.initial_obstacle_stored = True
-
                 self.get_logger().info(f"Robot's location: ({self.robot_x}, {self.robot_y})")
                 self.get_logger().info(f"Obstacle's location: ({self.obstacle_x}, {self.obstacle_y})")
-                self.get_logger().info(f"Initial Obstacle's location: ({self.initial_obstacle_x}, {self.initial_obstacle_y})")
+                self.get_logger().info(f"Initial Obstacle's location: ({self.initial_robot_x}, {self.initial_robot_y})")
             else:
                 self.get_logger().info("Waiting for LIDAR data...")
 
@@ -131,7 +137,7 @@ class AutonomousRobot(Node):
     def odom_callback(self, msg):
         orientation = msg.pose.pose.orientation
         roll, pitch, yaw = self.quaternion_to_euler(orientation)
-        self.get_logger().info(f"Orientation (Euler angles): Roll: {roll}, Pitch: {pitch}, Yaw: {yaw}")
+        # self.get_logger().info(f"Orientation (Euler angles): Roll: {roll}, Pitch: {pitch}, Yaw: {yaw}")
 
     def lidar_callback(self, msg):
         # Initialize variables for the closest obstacle within the safe distance
@@ -143,6 +149,9 @@ class AutonomousRobot(Node):
             if distance < self.safe_distance and distance < min_distance:
                 min_distance = distance
                 min_index = i
+
+        
+
 
         # If an obstacle within the safe distance is found, calculate its angle
         if min_index != -1:
@@ -159,6 +168,11 @@ class AutonomousRobot(Node):
         half_index = len(front_distances) // 2
         left_scan = front_distances[:half_index]
         right_scan = front_distances[half_index:]
+        self.get_logger().info(f"Distance to obstacle: {front_distances}")
+
+        # for distances in enumerate(front_distances):
+        #     if  distances == "inf":
+        #         self.cmd.linear.x = 0.0
 
         self.obstacle_on_left = any(distance < self.safe_distance for distance in left_scan)
         self.obstacle_on_right = any(distance < self.safe_distance for distance in right_scan)
@@ -211,10 +225,10 @@ class AutonomousRobot(Node):
             if self.obstacle_on_left or self.obstacle_on_right:
                 self.avoid_obstacle()
 
-            if self.adjust != 0.0:
+            if self.adjust < - 0.5 or self.adjust > 0.5:
                 self.back_to_path()    
                 # if not self.obstacle_on_right or self.obstacle_on_left:
-                #     self.adjust = 0
+                #     self.adjust = 0   
             
 
             else:
@@ -227,9 +241,22 @@ class AutonomousRobot(Node):
 
         if self.y_axis_comparison():
             self.get_logger().info("Y-axis alignment with obstacle detected. Taking evasive action.")
-            self.cmd.linear.x = 0.0  # Stop the robot
+            # self.cmd.linear.x = 0.0  # Stop the robot
 
         self.publisher.publish(self.cmd)
+
+
+    def finished_row(self):
+        if 7.6 > (abs(self.robot_y) + self.initial_robot_y) and (abs(self.robot_y) + self.initial_robot_y) > 6.8:
+            self.cmd.linear.x = 0.0
+            self.get_logger().info("stopping")
+
+            self.publisher.publish(self.cmd)
+            return True  # Return True when the condition is met
+        
+        return False  # Return False otherwise
+
+           
 
     def avoid_obstacle(self):
         self.cmd.linear.x = 0.0
@@ -264,9 +291,13 @@ class AutonomousRobot(Node):
                 self.adjust += self.cmd.angular.z
                 self.get_logger().info(f"nice: {self.adjust}")
                 if 1.0 > self.adjust > -1.0:
-                    self.cmd.angular.z = 0.0
+                    self.move_forward()
                     self.publisher.publish(self.cmd)
-                    
+
+                    if self.finished_row():
+                        self.cmd.linear.x = 0.0
+
+                        self.publisher.publish(self.cmd)
 
                 self.publisher.publish(self.cmd)
         elif not self.obstacle_on_right and self.adjust < 0:
@@ -276,8 +307,15 @@ class AutonomousRobot(Node):
                 self.adjust += self.cmd.angular.z
                 self.get_logger().info(f"nice: {self.adjust}")
                 if 1.0 > self.adjust > -1.0:
-                    self.cmd.angular.z = 0.0
+                    self.move_forward()
                     self.publisher.publish(self.cmd)
+
+
+                    if self.finished_row():
+                        self.cmd.linear.x = 0.0
+
+                        self.publisher.publish(self.cmd)
+
 
                 self.publisher.publish(self.cmd)    
 
